@@ -181,32 +181,22 @@ func (c Client) writeMessage(m irc.Message) error {
 
 // readMessage reads a line from the connection and parses it as an IRC message.
 func (c Client) readMessage() (irc.Message, error) {
-	buf, err := c.read()
-	if err != nil {
-		return irc.Message{}, err
-	}
-
-	m, err := irc.ParseMessage(buf)
-	if err != nil && err != irc.ErrTruncated {
-		return irc.Message{}, fmt.Errorf("unable to parse message: %s: %s", buf,
-			err)
-	}
-
-	return m, nil
-}
-
-// read reads a line from the connection.
-func (c Client) read() (string, error) {
 	if err := c.conn.SetReadDeadline(time.Now().Add(c.readTimeout)); err != nil {
-		return "", fmt.Errorf("unable to set deadline: %s", err)
+		return irc.Message{}, fmt.Errorf("unable to set deadline: %s", err)
 	}
 
 	line, err := c.rw.ReadString('\n')
 	if err != nil {
-		return "", err
+		return irc.Message{}, err
 	}
 
 	log.Printf("client %s: read: %s", c.Nick, strings.TrimRight(line, "\r\n"))
 
-	return line, nil
+	m, err := irc.ParseMessage(line)
+	if err != nil && err != irc.ErrTruncated {
+		return irc.Message{}, fmt.Errorf("unable to parse message: %s: %s", line,
+			err)
+	}
+
+	return m, nil
 }
