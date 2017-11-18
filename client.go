@@ -157,22 +157,17 @@ func (c Client) writeMessage(m irc.Message) error {
 		return fmt.Errorf("unable to encode message: %s", err)
 	}
 
-	return c.write(buf)
-}
-
-// write writes a string to the connection
-func (c Client) write(s string) error {
 	if err := c.conn.SetWriteDeadline(time.Now().Add(
 		c.writeTimeout)); err != nil {
 		return fmt.Errorf("unable to set deadline: %s", err)
 	}
 
-	sz, err := c.rw.WriteString(s)
+	sz, err := c.rw.WriteString(buf)
 	if err != nil {
 		return err
 	}
 
-	if sz != len(s) {
+	if sz != len(buf) {
 		return fmt.Errorf("short write")
 	}
 
@@ -180,8 +175,7 @@ func (c Client) write(s string) error {
 		return fmt.Errorf("flush error: %s", err)
 	}
 
-	log.Printf("client %s: sent: %s", c.Nick, strings.TrimRight(s, "\r\n"))
-
+	log.Printf("client %s: sent: %s", c.Nick, strings.TrimRight(buf, "\r\n"))
 	return nil
 }
 
