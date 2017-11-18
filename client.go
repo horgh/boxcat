@@ -56,10 +56,16 @@ func (c *Client) start() (<-chan irc.Message, chan<- irc.Message, <-chan error,
 		return nil, nil, nil, nil, fmt.Errorf("error connecting: %s", err)
 	}
 
-	if err := c.nickCommand(c.Nick); err != nil {
+	if err := c.writeMessage(irc.Message{
+		Command: "NICK",
+		Params:  []string{c.Nick},
+	}); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	if err := c.userCommand(c.Nick, c.Nick); err != nil {
+	if err := c.writeMessage(irc.Message{
+		Command: "USER",
+		Params:  []string{c.Nick, "0", "*", c.Nick},
+	}); err != nil {
 		return nil, nil, nil, nil, err
 	}
 
@@ -93,7 +99,10 @@ func (c *Client) start() (<-chan irc.Message, chan<- irc.Message, <-chan error,
 			}
 
 			if m.Command == "PING" {
-				if err := c.pongCommand(m); err != nil {
+				if err := c.writeMessage(irc.Message{
+					Command: "PONG",
+					Params:  []string{m.Params[0]},
+				}); err != nil {
 					errChan <- fmt.Errorf("error sending pong: %s", err)
 					close(recvChan)
 					return
@@ -139,30 +148,6 @@ func (c *Client) connect() error {
 	c.conn = conn
 	c.rw = bufio.NewReadWriter(bufio.NewReader(c.conn), bufio.NewWriter(c.conn))
 	return nil
-}
-
-// nickCommand sends the NICK command.
-func (c *Client) nickCommand(n string) error {
-	return c.writeMessage(irc.Message{
-		Command: "NICK",
-		Params:  []string{n},
-	})
-}
-
-// userCommand sends the USER command.
-func (c *Client) userCommand(ident, realName string) error {
-	return c.writeMessage(irc.Message{
-		Command: "USER",
-		Params:  []string{ident, "0", "*", realName},
-	})
-}
-
-// pongCommand sends a PONG in response to the given PING message.
-func (c *Client) pongCommand(ping irc.Message) error {
-	return c.writeMessage(irc.Message{
-		Command: "PONG",
-		Params:  []string{ping.Params[0]},
-	})
 }
 
 // writeMessage writes an IRC message to the connection.
