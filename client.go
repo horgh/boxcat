@@ -143,26 +143,18 @@ func (c *Client) connect() error {
 
 // nickCommand sends the NICK command.
 func (c *Client) nickCommand(n string) error {
-	if err := c.writeMessage(irc.Message{
+	return c.writeMessage(irc.Message{
 		Command: "NICK",
 		Params:  []string{n},
-	}); err != nil {
-		return fmt.Errorf("failed to send NICK: %s", err)
-	}
-
-	return nil
+	})
 }
 
 // userCommand sends the USER command.
 func (c *Client) userCommand(ident, realName string) error {
-	if err := c.writeMessage(irc.Message{
+	return c.writeMessage(irc.Message{
 		Command: "USER",
 		Params:  []string{ident, "0", "*", realName},
-	}); err != nil {
-		return fmt.Errorf("failed to send USER: %s", err)
-	}
-
-	return nil
+	})
 }
 
 // pongCommand sends a PONG in response to the given PING message.
