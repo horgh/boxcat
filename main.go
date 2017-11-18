@@ -12,7 +12,7 @@ func main() {
 
 	nick1 := "client1"
 	client1 := newClient(nick1, "127.0.0.1", catbox.Port)
-	recvChan1, sendChan1, errChan1, err := client1.start()
+	recvChan1, sendChan1, errChan1, doneChan1, err := client1.start()
 	if err != nil {
 		log.Printf("error starting client: %s", err)
 		catbox.stop()
@@ -24,6 +24,7 @@ func main() {
 	}
 
 	close(sendChan1)
+	close(doneChan1)
 
 	for err := range errChan1 {
 		log.Printf("got err: %s", err)

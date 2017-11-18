@@ -44,22 +44,29 @@ func newClient(nick, serverHost string, serverPort uint16) *Client {
 // It also responds to PINGs.
 //
 // If an error occurs, it ends. It does not try to reconnect.
+//
+// The receive channel will close when an error occurs.
+//
+// The caller should close the send channel to clean up.
+//
+// The caller should drain the error channel after closing the send channel.
 func (c *Client) start() (<-chan irc.Message, chan<- irc.Message, <-chan error,
-	error) {
+	chan struct{}, error) {
 	if err := c.connect(); err != nil {
-		return nil, nil, nil, fmt.Errorf("error connecting: %s", err)
+		return nil, nil, nil, nil, fmt.Errorf("error connecting: %s", err)
 	}
 
 	if err := c.nickCommand(c.Nick); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if err := c.userCommand(c.Nick, c.Nick); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	recvChan := make(chan irc.Message, 512)
 	sendChan := make(chan irc.Message, 512)
 	errChan := make(chan error, 512)
+	doneChan := make(chan struct{})
 
 	var wg sync.WaitGroup
 
@@ -67,6 +74,13 @@ func (c *Client) start() (<-chan irc.Message, chan<- irc.Message, <-chan error,
 	go func() {
 		defer wg.Done()
 		for {
+			select {
+			case <-doneChan:
+				close(recvChan)
+				return
+			default:
+			}
+
 			m, err := c.readMessage()
 			if err != nil {
 				errChan <- fmt.Errorf("error reading message: %s", err)
@@ -102,7 +116,7 @@ func (c *Client) start() (<-chan irc.Message, chan<- irc.Message, <-chan error,
 		close(errChan)
 	}()
 
-	return recvChan, sendChan, errChan, nil
+	return recvChan, sendChan, errChan, doneChan, nil
 }
 
 // connect opens a new connection to the server.
