@@ -18,9 +18,10 @@ type Client struct {
 	ServerHost string
 	ServerPort uint16
 
-	conn        net.Conn
-	rw          *bufio.ReadWriter
-	timeoutTime time.Duration
+	conn         net.Conn
+	rw           *bufio.ReadWriter
+	writeTimeout time.Duration
+	readTimeout  time.Duration
 }
 
 func newClient(nick, serverHost string, serverPort uint16) *Client {
@@ -29,7 +30,8 @@ func newClient(nick, serverHost string, serverPort uint16) *Client {
 		ServerHost: serverHost,
 		ServerPort: serverPort,
 
-		timeoutTime: 5 * time.Minute,
+		writeTimeout: 30 * time.Second,
+		readTimeout:  time.Second,
 	}
 }
 
@@ -165,7 +167,8 @@ func (c Client) writeMessage(m irc.Message) error {
 
 // write writes a string to the connection
 func (c Client) write(s string) error {
-	if err := c.conn.SetDeadline(time.Now().Add(c.timeoutTime)); err != nil {
+	if err := c.conn.SetWriteDeadline(time.Now().Add(
+		c.writeTimeout)); err != nil {
 		return fmt.Errorf("unable to set deadline: %s", err)
 	}
 
@@ -205,7 +208,7 @@ func (c Client) readMessage() (irc.Message, error) {
 
 // read reads a line from the connection.
 func (c Client) read() (string, error) {
-	if err := c.conn.SetDeadline(time.Now().Add(c.timeoutTime)); err != nil {
+	if err := c.conn.SetReadDeadline(time.Now().Add(c.readTimeout)); err != nil {
 		return "", fmt.Errorf("unable to set deadline: %s", err)
 	}
 
