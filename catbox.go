@@ -49,7 +49,7 @@ func harnessCatbox() (*Catbox, error) {
 	go func() {
 		defer wg.Done()
 		if err := catbox.Command.Wait(); err != nil {
-			log.Printf("error from catbox: %s", err)
+			log.Printf("catbox exited: %s", err)
 		}
 	}()
 

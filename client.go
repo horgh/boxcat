@@ -185,7 +185,7 @@ func (c Client) write(s string) error {
 		return fmt.Errorf("flush error: %s", err)
 	}
 
-	log.Printf("Sent: %s", strings.TrimRight(s, "\r\n"))
+	log.Printf("client %s: sent: %s", c.Nick, strings.TrimRight(s, "\r\n"))
 
 	return nil
 }
@@ -217,7 +217,7 @@ func (c Client) read() (string, error) {
 		return "", err
 	}
 
-	log.Printf("Read: %s", strings.TrimRight(line, "\r\n"))
+	log.Printf("client %s: read: %s", c.Nick, strings.TrimRight(line, "\r\n"))
 
 	return line, nil
 }
