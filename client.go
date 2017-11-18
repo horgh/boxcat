@@ -83,6 +83,10 @@ func (c *Client) start() (<-chan irc.Message, chan<- irc.Message, <-chan error,
 
 			m, err := c.readMessage()
 			if err != nil {
+				// There's no accessible error variable to compare with
+				if strings.Contains(err.Error(), "i/o timeout") {
+					continue
+				}
 				errChan <- fmt.Errorf("error reading message: %s", err)
 				close(recvChan)
 				return
