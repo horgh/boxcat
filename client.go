@@ -18,10 +18,17 @@ type Client struct {
 	ServerHost string
 	ServerPort uint16
 
-	conn         net.Conn
-	rw           *bufio.ReadWriter
 	writeTimeout time.Duration
 	readTimeout  time.Duration
+
+	conn net.Conn
+	rw   *bufio.ReadWriter
+
+	recvChan chan irc.Message
+	sendChan chan irc.Message
+	errChan  chan error
+	doneChan chan struct{}
+	wg       *sync.WaitGroup
 }
 
 func newClient(nick, serverHost string, serverPort uint16) *Client {
@@ -35,101 +42,55 @@ func newClient(nick, serverHost string, serverPort uint16) *Client {
 	}
 }
 
-// start starts a connection. All messages received from the server will be
-// sent on the first channel. Messages sent to the second channel will be sent
-// to the server.
+// start starts a connection and registers.
 //
-// The Client takes care of connection registration.
+// The client responds to PING commands.
 //
-// It also responds to PINGs.
+// All messages received from the server will be sent on the receive ehannel.
 //
-// If an error occurs, it ends. It does not try to reconnect.
+// Messages you send to the send channel will be sent to the server.
 //
-// The receive channel will close when an error occurs.
+// If an error occurs, we send a message on the error channel. If you receive a
+// message on that channel, you must stop the client.
 //
-// The caller should close the send channel to clean up.
-//
-// The caller should drain the error channel after closing the send channel.
-func (c *Client) start() (<-chan irc.Message, chan<- irc.Message, <-chan error,
-	chan struct{}, error) {
+// The caller must call stop() to clean up the client.
+func (c *Client) start() (<-chan irc.Message, chan<- irc.Message,
+	<-chan error, error) {
 	if err := c.connect(); err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("error connecting: %s", err)
+		return nil, nil, nil, fmt.Errorf("error connecting: %s", err)
 	}
 
 	if err := c.writeMessage(irc.Message{
 		Command: "NICK",
 		Params:  []string{c.Nick},
 	}); err != nil {
-		return nil, nil, nil, nil, err
+		_ = c.conn.Close()
+		return nil, nil, nil, err
 	}
+
 	if err := c.writeMessage(irc.Message{
 		Command: "USER",
 		Params:  []string{c.Nick, "0", "*", c.Nick},
 	}); err != nil {
-		return nil, nil, nil, nil, err
+		_ = c.conn.Close()
+		return nil, nil, nil, err
 	}
 
-	recvChan := make(chan irc.Message, 512)
-	sendChan := make(chan irc.Message, 512)
-	errChan := make(chan error, 512)
-	doneChan := make(chan struct{})
+	c.recvChan = make(chan irc.Message, 512)
+	c.sendChan = make(chan irc.Message, 512)
+	c.errChan = make(chan error, 512)
+	c.doneChan = make(chan struct{})
 
-	var wg sync.WaitGroup
+	c.wg = &sync.WaitGroup{}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-doneChan:
-				close(recvChan)
-				return
-			default:
-			}
+	c.wg.Add(1)
+	go c.reader(c.recvChan)
 
-			m, err := c.readMessage()
-			if err != nil {
-				// There's no accessible error variable to compare with
-				if strings.Contains(err.Error(), "i/o timeout") {
-					continue
-				}
-				errChan <- fmt.Errorf("error reading message: %s", err)
-				close(recvChan)
-				return
-			}
+	// Writer
+	c.wg.Add(1)
+	go c.writer(c.sendChan)
 
-			if m.Command == "PING" {
-				if err := c.writeMessage(irc.Message{
-					Command: "PONG",
-					Params:  []string{m.Params[0]},
-				}); err != nil {
-					errChan <- fmt.Errorf("error sending pong: %s", err)
-					close(recvChan)
-					return
-				}
-			}
-
-			recvChan <- m
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for m := range sendChan {
-			if err := c.writeMessage(m); err != nil {
-				errChan <- fmt.Errorf("error writing message: %s", err)
-				return
-			}
-		}
-	}()
-
-	go func() {
-		wg.Wait()
-		close(errChan)
-	}()
-
-	return recvChan, sendChan, errChan, doneChan, nil
+	return c.recvChan, c.sendChan, c.errChan, nil
 }
 
 // connect opens a new connection to the server.
@@ -148,6 +109,68 @@ func (c *Client) connect() error {
 	c.conn = conn
 	c.rw = bufio.NewReadWriter(bufio.NewReader(c.conn), bufio.NewWriter(c.conn))
 	return nil
+}
+
+func (c Client) reader(recvChan chan<- irc.Message) {
+	defer c.wg.Done()
+
+	for {
+		select {
+		case <-c.doneChan:
+			close(recvChan)
+			return
+		default:
+		}
+
+		m, err := c.readMessage()
+		if err != nil {
+			// If we time out waiting for a read to succeed, just ignore it and try
+			// again. We want a short timeout on that so we frequently check
+			// whether we should send.
+			//
+			// There's no accessible error variable to compare with
+			if strings.Contains(err.Error(), "i/o timeout") {
+				continue
+			}
+
+			c.errChan <- fmt.Errorf("error reading message: %s", err)
+			close(recvChan)
+			return
+		}
+
+		if m.Command == "PING" {
+			if err := c.writeMessage(irc.Message{
+				Command: "PONG",
+				Params:  []string{m.Params[0]},
+			}); err != nil {
+				c.errChan <- fmt.Errorf("error sending pong: %s", err)
+				close(recvChan)
+				return
+			}
+		}
+
+		recvChan <- m
+	}
+}
+
+func (c Client) writer(sendChan <-chan irc.Message) {
+	defer c.wg.Done()
+
+LOOP:
+	for {
+		select {
+		case <-c.doneChan:
+			break LOOP
+		case m := <-sendChan:
+			if err := c.writeMessage(m); err != nil {
+				c.errChan <- fmt.Errorf("error writing message: %s", err)
+				break
+			}
+		}
+	}
+
+	for range sendChan {
+	}
 }
 
 // writeMessage writes an IRC message to the connection.
@@ -199,4 +222,29 @@ func (c Client) readMessage() (irc.Message, error) {
 	}
 
 	return m, nil
+}
+
+// Shut down the client and clean up.
+//
+// You must not send any messages on the send channel after calling this
+// function.
+func (c *Client) stop() {
+	// Tell reader and writer to end.
+	close(c.doneChan)
+
+	close(c.sendChan)
+
+	// Wait for reader and writer to end.
+	c.wg.Wait()
+
+	// We know the reader and writer won't be sending on the error channel any
+	// more.
+	close(c.errChan)
+
+	_ = c.conn.Close()
+
+	for range c.recvChan {
+	}
+	for range c.errChan {
+	}
 }

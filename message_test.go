@@ -17,7 +17,7 @@ func TestPRIVMSG(t *testing.T) {
 	}
 
 	client1 := newClient("client1", "127.0.0.1", catbox.Port)
-	recvChan1, sendChan1, errChan1, doneChan1, err := client1.start()
+	recvChan1, sendChan1, _, err := client1.start()
 	if err != nil {
 		catbox.stop()
 		t.Logf("error starting client: %s", err)
@@ -25,50 +25,48 @@ func TestPRIVMSG(t *testing.T) {
 	}
 
 	client2 := newClient("client2", "127.0.0.1", catbox.Port)
-	recvChan2, sendChan2, errChan2, doneChan2, err := client2.start()
+	recvChan2, _, _, err := client2.start()
 	if err != nil {
-		catbox.stop()
-		close(sendChan1)
-		close(doneChan1)
 		t.Logf("error starting client: %s", err)
+		catbox.stop()
+		client1.stop()
 		t.FailNow()
 	}
 
-	waitForMessage(t, recvChan1, irc.Message{Command: irc.ReplyWelcome},
-		"welcome from %s", client1.Nick)
-	waitForMessage(t, recvChan2, irc.Message{Command: irc.ReplyWelcome},
-		"welcome from %s", client2.Nick)
+	if !waitForMessage(t, recvChan1, irc.Message{Command: irc.ReplyWelcome},
+		"welcome from %s", client1.Nick) {
+		catbox.stop()
+		client1.stop()
+		client2.stop()
+		t.FailNow()
+	}
+	if !waitForMessage(t, recvChan2, irc.Message{Command: irc.ReplyWelcome},
+		"welcome from %s", client2.Nick) {
+		catbox.stop()
+		client1.stop()
+		client2.stop()
+		t.FailNow()
+	}
 
 	sendChan1 <- irc.Message{
 		Command: "PRIVMSG",
 		Params:  []string{client2.Nick, "hi there"},
 	}
 
-	close(sendChan1)
-	close(sendChan2)
-
-	waitForMessage(t, recvChan2, irc.Message{
+	if !waitForMessage(t, recvChan2, irc.Message{
 		Command: "PRIVMSG",
 		Params:  []string{client2.Nick, "hi there"},
 	},
-		"%s received PRIVMSG from %s", client1.Nick, client2.Nick)
-
-	close(doneChan1)
-	close(doneChan2)
-
-	for range recvChan1 {
-	}
-	for range recvChan2 {
-	}
-
-	for err := range errChan1 {
-		t.Errorf("client 1 reported error: %s", err)
-	}
-	for err := range errChan2 {
-		t.Errorf("client 2 reported error: %s", err)
+		"%s received PRIVMSG from %s", client1.Nick, client2.Nick) {
+		catbox.stop()
+		client1.stop()
+		client2.stop()
+		t.FailNow()
 	}
 
 	catbox.stop()
+	client1.stop()
+	client2.stop()
 }
 
 func waitForMessage(
@@ -77,15 +75,16 @@ func waitForMessage(
 	want irc.Message,
 	format string,
 	a ...interface{},
-) {
+) bool {
 	for {
 		select {
 		case <-time.After(10 * time.Second):
-			t.Fatalf("timeout waiting for message: %s", want)
+			t.Logf("timeout waiting for message: %s", want)
+			return false
 		case got := <-ch:
 			if got.Command == want.Command {
 				log.Printf("got command: %s", fmt.Sprintf(format, a...))
-				return
+				return true
 			}
 		}
 	}
