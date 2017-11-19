@@ -15,37 +15,29 @@ func TestPRIVMSG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error harnessing catbox: %s", err)
 	}
+	defer catbox.stop()
 
 	client1 := newClient("client1", "127.0.0.1", catbox.Port)
 	recvChan1, sendChan1, _, err := client1.start()
 	if err != nil {
-		catbox.stop()
-		t.Logf("error starting client: %s", err)
-		t.FailNow()
+		t.Fatalf("error starting client: %s", err)
 	}
+	defer client1.stop()
 
 	client2 := newClient("client2", "127.0.0.1", catbox.Port)
 	recvChan2, _, _, err := client2.start()
 	if err != nil {
-		t.Logf("error starting client: %s", err)
-		catbox.stop()
-		client1.stop()
-		t.FailNow()
+		t.Fatalf("error starting client: %s", err)
 	}
+	defer client2.stop()
 
 	if !waitForMessage(t, recvChan1, irc.Message{Command: irc.ReplyWelcome},
 		"welcome from %s", client1.Nick) {
-		catbox.stop()
-		client1.stop()
-		client2.stop()
-		t.FailNow()
+		t.Fatalf("client1 did not get welcome")
 	}
 	if !waitForMessage(t, recvChan2, irc.Message{Command: irc.ReplyWelcome},
 		"welcome from %s", client2.Nick) {
-		catbox.stop()
-		client1.stop()
-		client2.stop()
-		t.FailNow()
+		t.Fatalf("client2 did not get welcome")
 	}
 
 	sendChan1 <- irc.Message{
@@ -53,20 +45,17 @@ func TestPRIVMSG(t *testing.T) {
 		Params:  []string{client2.Nick, "hi there"},
 	}
 
-	if !waitForMessage(t, recvChan2, irc.Message{
-		Command: "PRIVMSG",
-		Params:  []string{client2.Nick, "hi there"},
-	},
-		"%s received PRIVMSG from %s", client1.Nick, client2.Nick) {
-		catbox.stop()
-		client1.stop()
-		client2.stop()
-		t.FailNow()
+	if !waitForMessage(
+		t,
+		recvChan2,
+		irc.Message{
+			Command: "PRIVMSG",
+			Params:  []string{client2.Nick, "hi there"},
+		},
+		"%s received PRIVMSG from %s", client1.Nick, client2.Nick,
+	) {
+		t.Fatalf("client1 did not receive message from client2")
 	}
-
-	catbox.stop()
-	client1.stop()
-	client2.stop()
 }
 
 func waitForMessage(

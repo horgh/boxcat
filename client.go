@@ -38,7 +38,7 @@ func newClient(nick, serverHost string, serverPort uint16) *Client {
 		ServerPort: serverPort,
 
 		writeTimeout: 30 * time.Second,
-		readTimeout:  time.Second,
+		readTimeout:  100 * time.Millisecond,
 	}
 }
 
@@ -161,7 +161,10 @@ LOOP:
 		select {
 		case <-c.doneChan:
 			break LOOP
-		case m := <-sendChan:
+		case m, ok := <-sendChan:
+			if !ok {
+				break
+			}
 			if err := c.writeMessage(m); err != nil {
 				c.errChan <- fmt.Errorf("error writing message: %s", err)
 				break
