@@ -91,26 +91,24 @@ func startCatbox() (*Catbox, error) {
 
 	catboxConf := filepath.Join(tmpDir, "catbox.conf")
 
-	// Retry as there's a race for our random port.
-	for i := 0; i < 3; i++ {
-		port, err := getRandomPort()
-		if err != nil {
-			return nil, fmt.Errorf("error finding random port to listen on: %s", err)
-		}
-
-		catbox, err := tryToStartCatbox(catboxConf, port)
-		if err == nil {
-			return catbox, nil
-		}
+	listener, port, err := getRandomPort()
+	if err != nil {
+		return nil, fmt.Errorf("error opening random port: %s", err)
 	}
 
-	return nil, fmt.Errorf("gave up trying to start catbox")
+	catbox, err := runCatbox(catboxConf, listener, port)
+	if err != nil {
+		_ = listener.Close()
+		return nil, fmt.Errorf("error running catbox: %s", err)
+	}
+
+	return catbox, nil
 }
 
-func getRandomPort() (uint16, error) {
+func getRandomPort() (net.Listener, uint16, error) {
 	ln, err := net.Listen("tcp4", "127.0.0.1:")
 	if err != nil {
-		return 0, fmt.Errorf("error opening a random port: %s", err)
+		return nil, 0, fmt.Errorf("error opening a random port: %s", err)
 	}
 
 	addr := ln.Addr().String()
@@ -119,25 +117,34 @@ func getRandomPort() (uint16, error) {
 	port, err := strconv.ParseUint(portString, 10, 16)
 	if err != nil {
 		_ = ln.Close()
-		return 0, fmt.Errorf("error parsing port: %s", err)
+		return nil, 0, fmt.Errorf("error parsing port: %s", err)
 	}
 
-	if err := ln.Close(); err != nil {
-		return 0, fmt.Errorf("error closing listener: %s", err)
-	}
-
-	return uint16(port), nil
+	return ln, uint16(port), nil
 }
 
-func tryToStartCatbox(conf string, port uint16) (*Catbox, error) {
-	buf := fmt.Sprintf(`listen-port = %d`, port)
+func runCatbox(conf string, ln net.Listener, port uint16) (*Catbox, error) {
+	// -1 because we pass in fd.
+	buf := fmt.Sprintf(`
+listen-port = %d
+`, -1)
 
 	if err := ioutil.WriteFile(conf, []byte(buf), 0644); err != nil {
 		return nil, fmt.Errorf("error writing conf: %s", err)
 	}
 
-	cmd := exec.Command("./catbox", "-conf", conf)
+	cmd := exec.Command("./catbox",
+		"-conf", conf,
+		"-listen-fd", "3",
+	)
+
 	cmd.Dir = catboxDir
+
+	f, err := ln.(*net.TCPListener).File()
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving listener file: %s", err)
+	}
+	cmd.ExtraFiles = []*os.File{f}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -150,7 +157,6 @@ func tryToStartCatbox(conf string, port uint16) (*Catbox, error) {
 	}
 
 	if err := cmd.Start(); err != nil {
-		// Try again in case it was a problem with the port being taken
 		_ = stderr.Close()
 		_ = stdout.Close()
 		return nil, fmt.Errorf("error starting: %s", err)
