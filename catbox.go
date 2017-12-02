@@ -23,6 +23,7 @@ type Catbox struct {
 	Stdout    io.ReadCloser
 	Command   *exec.Cmd
 	WaitGroup *sync.WaitGroup
+	ConfigDir string
 }
 
 var catboxDir = filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "horgh",
@@ -83,25 +84,23 @@ func startCatbox() (*Catbox, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving a temporary directory: %s", err)
 	}
-	defer func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			log.Fatalf("error cleaning up temporary directory: %s", err)
-		}
-	}()
 
 	catboxConf := filepath.Join(tmpDir, "catbox.conf")
 
 	listener, port, err := getRandomPort()
 	if err != nil {
+		_ = os.RemoveAll(tmpDir)
 		return nil, fmt.Errorf("error opening random port: %s", err)
 	}
 
 	catbox, err := runCatbox(catboxConf, listener, port)
 	if err != nil {
+		_ = os.RemoveAll(tmpDir)
 		_ = listener.Close()
 		return nil, fmt.Errorf("error running catbox: %s", err)
 	}
 
+	catbox.ConfigDir = tmpDir
 	return catbox, nil
 }
 
@@ -221,4 +220,8 @@ func (c *Catbox) stop() {
 		log.Printf("error killing catbox: %s", err)
 	}
 	c.WaitGroup.Wait()
+
+	if err := os.RemoveAll(c.ConfigDir); err != nil {
+		log.Fatalf("error cleaning up temporary directory: %s", err)
+	}
 }
