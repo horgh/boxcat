@@ -10,41 +10,48 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
 // Catbox holds information about a harnessed catbox.
 type Catbox struct {
+	Name      string
 	Port      uint16
 	Stderr    io.ReadCloser
 	Stdout    io.ReadCloser
 	Command   *exec.Cmd
 	WaitGroup *sync.WaitGroup
 	ConfigDir string
+	LogChan   <-chan string
 }
 
 var catboxDir = filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "horgh",
 	"catbox")
 
-func harnessCatbox() (*Catbox, error) {
+func harnessCatbox(name string) (*Catbox, error) {
 	if err := buildCatbox(); err != nil {
 		return nil, fmt.Errorf("error building catbox: %s", err)
 	}
 
-	catbox, err := startCatbox()
+	catbox, err := startCatbox(name)
 	if err != nil {
 		return nil, fmt.Errorf("error starting catbox: %s", err)
 	}
 
 	var wg sync.WaitGroup
 
+	logChan := make(chan string, 1024)
+
 	wg.Add(1)
-	go logReader(&wg, "catbox stderr", catbox.Stderr)
+	go logReader(&wg, fmt.Sprintf("%s stderr", name), catbox.Stderr, logChan)
+
 	wg.Add(1)
-	go logReader(&wg, "catbox stdout", catbox.Stdout)
+	go logReader(&wg, fmt.Sprintf("%s stdout", name), catbox.Stdout, logChan)
 
 	wg.Add(1)
 	go func() {
@@ -55,6 +62,18 @@ func harnessCatbox() (*Catbox, error) {
 	}()
 
 	catbox.WaitGroup = &wg
+	catbox.LogChan = logChan
+
+	// It is important to wait for catbox to fully start. If we don't, then
+	// certain things we do in tests will not work well. For example, trying to
+	// reload the conf by sending a SIGHUP will kill the process.
+	startedRE := regexp.MustCompile(
+		`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} catbox started$`)
+
+	if !waitForLog(logChan, startedRE) {
+		catbox.stop()
+		return nil, fmt.Errorf("error waiting for catbox to start")
+	}
 
 	return catbox, nil
 }
@@ -79,7 +98,7 @@ func buildCatbox() error {
 	return nil
 }
 
-func startCatbox() (*Catbox, error) {
+func startCatbox(name string) (*Catbox, error) {
 	tmpDir, err := ioutil.TempDir("", "boxcat-")
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving a temporary directory: %s", err)
@@ -93,7 +112,7 @@ func startCatbox() (*Catbox, error) {
 		return nil, fmt.Errorf("error opening random port: %s", err)
 	}
 
-	catbox, err := runCatbox(catboxConf, listener, port)
+	catbox, err := runCatbox(catboxConf, listener, port, name)
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
 		_ = listener.Close()
@@ -122,14 +141,14 @@ func getRandomPort() (net.Listener, uint16, error) {
 	return ln, uint16(port), nil
 }
 
-func runCatbox(conf string, ln net.Listener, port uint16) (*Catbox, error) {
-	// -1 because we pass in fd.
-	buf := fmt.Sprintf(`
-listen-port = %d
-`, -1)
-
-	if err := ioutil.WriteFile(conf, []byte(buf), 0644); err != nil {
-		return nil, fmt.Errorf("error writing conf: %s", err)
+func runCatbox(
+	conf string,
+	ln net.Listener,
+	port uint16,
+	name string,
+) (*Catbox, error) {
+	if err := writeConf(conf, name, ""); err != nil {
+		return nil, err
 	}
 
 	cmd := exec.Command("./catbox",
@@ -161,42 +180,37 @@ listen-port = %d
 		return nil, fmt.Errorf("error starting: %s", err)
 	}
 
-	address := fmt.Sprintf("127.0.0.1:%d", port)
-
-	for waited := time.Duration(0); waited < 3*time.Second; {
-		conn, err := net.DialTimeout("tcp4", address, 100*time.Millisecond)
-		if err != nil {
-			time.Sleep(100 * time.Millisecond)
-			waited += 100 * time.Millisecond
-			continue
-		}
-
-		_ = conn.Close()
-
-		return &Catbox{
-			Port:    port,
-			Command: cmd,
-			Stderr:  stderr,
-			Stdout:  stdout,
-		}, nil
-	}
-
-	stderrOutput, err := ioutil.ReadAll(stderr)
-	if err == nil && len(stderrOutput) != 0 {
-		log.Printf("catbox stderr: %s", stderrOutput)
-	}
-	_ = stderr.Close()
-
-	stdoutOutput, err := ioutil.ReadAll(stdout)
-	if err == nil && len(stdoutOutput) != 0 {
-		log.Printf("catbox stdout: %s", stdoutOutput)
-	}
-	_ = stdout.Close()
-
-	return nil, fmt.Errorf("catbox failed to start")
+	return &Catbox{
+		Name:    name,
+		Port:    port,
+		Command: cmd,
+		Stderr:  stderr,
+		Stdout:  stdout,
+	}, nil
 }
 
-func logReader(wg *sync.WaitGroup, prefix string, r io.Reader) {
+func writeConf(conf, name, extra string) error {
+	// -1 because we pass in fd.
+	buf := fmt.Sprintf(`
+listen-port = %d
+server-name = %s
+connect-attempt-time = 100ms
+%s
+`, -1, name, extra)
+
+	if err := ioutil.WriteFile(conf, []byte(buf), 0644); err != nil {
+		return fmt.Errorf("error writing conf: %s: %s", name, err)
+	}
+
+	return nil
+}
+
+func logReader(
+	wg *sync.WaitGroup,
+	prefix string,
+	r io.Reader,
+	ch chan<- string,
+) {
 	defer wg.Done()
 
 	scanner := bufio.NewScanner(r)
@@ -207,7 +221,13 @@ func logReader(wg *sync.WaitGroup, prefix string, r io.Reader) {
 		if line == "" {
 			continue
 		}
+
 		log.Printf("%s: %s", prefix, line)
+
+		select {
+		case ch <- line:
+		default:
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -223,5 +243,44 @@ func (c *Catbox) stop() {
 
 	if err := os.RemoveAll(c.ConfigDir); err != nil {
 		log.Fatalf("error cleaning up temporary directory: %s", err)
+	}
+}
+
+func (c *Catbox) linkServer(other *Catbox) error {
+	conf := filepath.Join(c.ConfigDir, "catbox.conf")
+	serversConf := filepath.Join(c.ConfigDir, "servers.conf")
+	extra := fmt.Sprintf("servers-config = %s", serversConf)
+
+	if err := writeConf(conf, c.Name, extra); err != nil {
+		return err
+	}
+
+	serversConfContent := fmt.Sprintf(`%s = %s,%d,%s,0`,
+		other.Name, "127.0.0.1", other.Port, "testing")
+
+	if err := ioutil.WriteFile(serversConf, []byte(serversConfContent),
+		0644); err != nil {
+		return fmt.Errorf("error writing server conf: %s: %s", serversConf, err)
+	}
+
+	if err := c.Command.Process.Signal(syscall.SIGHUP); err != nil {
+		return fmt.Errorf("error sending SIGHUP: %s", err)
+	}
+
+	return nil
+}
+
+func waitForLog(ch <-chan string, re *regexp.Regexp) bool {
+	timeoutChan := time.After(10 * time.Second)
+
+	for {
+		select {
+		case s := <-ch:
+			if re.MatchString(s) {
+				return true
+			}
+		case <-timeoutChan:
+			return false
+		}
 	}
 }
