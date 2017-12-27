@@ -15,8 +15,8 @@ import (
 // Client represents a client connection.
 type Client struct {
 	Nick       string
-	ServerHost string
-	ServerPort uint16
+	serverHost string
+	serverPort uint16
 
 	writeTimeout time.Duration
 	readTimeout  time.Duration
@@ -34,8 +34,8 @@ type Client struct {
 func newClient(nick, serverHost string, serverPort uint16) *Client {
 	return &Client{
 		Nick:       nick,
-		ServerHost: serverHost,
-		ServerPort: serverPort,
+		serverHost: serverHost,
+		serverPort: serverPort,
 
 		writeTimeout: 30 * time.Second,
 		readTimeout:  100 * time.Millisecond,
@@ -103,8 +103,8 @@ func (c *Client) connect() error {
 		KeepAlive: 30 * time.Second,
 	}
 
-	conn, err := dialer.Dial("tcp", fmt.Sprintf("%s:%d", c.ServerHost,
-		c.ServerPort))
+	conn, err := dialer.Dial("tcp", fmt.Sprintf("%s:%d", c.serverHost,
+		c.serverPort))
 	if err != nil {
 		return fmt.Errorf("error dialing: %s", err)
 	}
