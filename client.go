@@ -238,6 +238,7 @@ func (c *Client) stop() {
 	// Tell reader and writer to end.
 	close(c.doneChan)
 
+	// We won't be sending anything further to writer. Let it clean up.
 	close(c.sendChan)
 
 	// Wait for reader and writer to end.
