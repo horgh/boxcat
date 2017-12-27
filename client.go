@@ -14,7 +14,7 @@ import (
 
 // Client represents a client connection.
 type Client struct {
-	Nick       string
+	nick       string
 	serverHost string
 	serverPort uint16
 
@@ -33,7 +33,7 @@ type Client struct {
 
 func newClient(nick, serverHost string, serverPort uint16) *Client {
 	return &Client{
-		Nick:       nick,
+		nick:       nick,
 		serverHost: serverHost,
 		serverPort: serverPort,
 
@@ -66,7 +66,7 @@ func (c *Client) start() (
 
 	if err := c.writeMessage(irc.Message{
 		Command: "NICK",
-		Params:  []string{c.Nick},
+		Params:  []string{c.nick},
 	}); err != nil {
 		_ = c.conn.Close()
 		return nil, nil, nil, err
@@ -74,7 +74,7 @@ func (c *Client) start() (
 
 	if err := c.writeMessage(irc.Message{
 		Command: "USER",
-		Params:  []string{c.Nick, "0", "*", c.Nick},
+		Params:  []string{c.nick, "0", "*", c.nick},
 	}); err != nil {
 		_ = c.conn.Close()
 		return nil, nil, nil, err
@@ -204,7 +204,7 @@ func (c Client) writeMessage(m irc.Message) error {
 		return fmt.Errorf("flush error: %s", err)
 	}
 
-	log.Printf("client %s: sent: %s", c.Nick, strings.TrimRight(buf, "\r\n"))
+	log.Printf("client %s: sent: %s", c.nick, strings.TrimRight(buf, "\r\n"))
 	return nil
 }
 
@@ -219,7 +219,7 @@ func (c Client) readMessage() (irc.Message, error) {
 		return irc.Message{}, err
 	}
 
-	log.Printf("client %s: read: %s", c.Nick, strings.TrimRight(line, "\r\n"))
+	log.Printf("client %s: read: %s", c.nick, strings.TrimRight(line, "\r\n"))
 
 	m, err := irc.ParseMessage(line)
 	if err != nil && err != irc.ErrTruncated {
@@ -255,3 +255,6 @@ func (c *Client) stop() {
 	for range c.errChan {
 	}
 }
+
+// GetNick retrieves the client's nick.
+func (c Client) GetNick() string { return c.nick }

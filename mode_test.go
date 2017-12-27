@@ -46,7 +46,7 @@ func TestMODETS(t *testing.T) {
 	defer client1.stop()
 
 	if waitForMessage(t, recvChan1, irc.Message{Command: irc.ReplyWelcome},
-		"welcome from %s", client1.Nick) == nil {
+		"welcome from %s", client1.GetNick()) == nil {
 		t.Fatalf("client1 did not get welcome")
 	}
 
@@ -61,7 +61,7 @@ func TestMODETS(t *testing.T) {
 			Command: "JOIN",
 			Params:  []string{"#test"},
 		},
-		"%s received JOIN #test", client1.Nick,
+		"%s received JOIN #test", client1.GetNick(),
 	) == nil {
 		t.Fatalf("client1 did not receive JOIN message")
 	}
@@ -76,7 +76,7 @@ func TestMODETS(t *testing.T) {
 		irc.Message{
 			Command: "329",
 		},
-		"%s received 329 response after MODE command", client1.Nick,
+		"%s received 329 response after MODE command", client1.GetNick(),
 	)
 	if creationTimeMessage == nil {
 		t.Fatalf("client1 did not receive 329 response")
@@ -99,7 +99,7 @@ func TestMODETS(t *testing.T) {
 		&irc.Message{
 			Prefix:  catbox1.Name,
 			Command: "329",
-			Params:  []string{client1.Nick, "#test", creationTimeString},
+			Params:  []string{client1.GetNick(), "#test", creationTimeString},
 		},
 	)
 
@@ -117,7 +117,7 @@ func TestMODETS(t *testing.T) {
 	defer client2.stop()
 
 	if waitForMessage(t, recvChan2, irc.Message{Command: irc.ReplyWelcome},
-		"welcome from %s", client2.Nick) == nil {
+		"welcome from %s", client2.GetNick()) == nil {
 		t.Fatalf("client2 did not get welcome")
 	}
 
@@ -132,7 +132,7 @@ func TestMODETS(t *testing.T) {
 			Command: "JOIN",
 			Params:  []string{"#test"},
 		},
-		"%s received JOIN #test", client2.Nick,
+		"%s received JOIN #test", client2.GetNick(),
 	) == nil {
 		t.Fatalf("client2 did not receive JOIN message")
 	}
@@ -147,7 +147,7 @@ func TestMODETS(t *testing.T) {
 		irc.Message{
 			Command: "329",
 		},
-		"%s received 329 response after MODE command", client2.Nick,
+		"%s received 329 response after MODE command", client2.GetNick(),
 	)
 	if creationTimeMessage == nil {
 		t.Fatalf("client2 did not receive 329 response")
@@ -159,7 +159,7 @@ func TestMODETS(t *testing.T) {
 		&irc.Message{
 			Prefix:  catbox2.Name,
 			Command: "329",
-			Params:  []string{client2.Nick, "#test", creationTimeString},
+			Params:  []string{client2.GetNick(), "#test", creationTimeString},
 		},
 	)
 }

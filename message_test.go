@@ -32,17 +32,17 @@ func TestPRIVMSG(t *testing.T) {
 	defer client2.stop()
 
 	if waitForMessage(t, recvChan1, irc.Message{Command: irc.ReplyWelcome},
-		"welcome from %s", client1.Nick) == nil {
+		"welcome from %s", client1.GetNick()) == nil {
 		t.Fatalf("client1 did not get welcome")
 	}
 	if waitForMessage(t, recvChan2, irc.Message{Command: irc.ReplyWelcome},
-		"welcome from %s", client2.Nick) == nil {
+		"welcome from %s", client2.GetNick()) == nil {
 		t.Fatalf("client2 did not get welcome")
 	}
 
 	sendChan1 <- irc.Message{
 		Command: "PRIVMSG",
-		Params:  []string{client2.Nick, "hi there"},
+		Params:  []string{client2.GetNick(), "hi there"},
 	}
 
 	if waitForMessage(
@@ -50,9 +50,9 @@ func TestPRIVMSG(t *testing.T) {
 		recvChan2,
 		irc.Message{
 			Command: "PRIVMSG",
-			Params:  []string{client2.Nick, "hi there"},
+			Params:  []string{client2.GetNick(), "hi there"},
 		},
-		"%s received PRIVMSG from %s", client1.Nick, client2.Nick,
+		"%s received PRIVMSG from %s", client1.GetNick(), client2.GetNick(),
 	) == nil {
 		t.Fatalf("client1 did not receive message from client2")
 	}
