@@ -90,7 +90,6 @@ func (c *Client) start() (
 	c.wg.Add(1)
 	go c.reader(c.recvChan)
 
-	// Writer
 	c.wg.Add(1)
 	go c.writer(c.sendChan)
 
