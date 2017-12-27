@@ -46,7 +46,7 @@ func newClient(nick, serverHost string, serverPort uint16) *Client {
 //
 // The client responds to PING commands.
 //
-// All messages received from the server will be sent on the receive ehannel.
+// All messages received from the server will be sent on the receive channel.
 //
 // Messages you send to the send channel will be sent to the server.
 //
