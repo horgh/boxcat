@@ -259,3 +259,12 @@ func (c *Client) Stop() {
 
 // GetNick retrieves the client's nick.
 func (c Client) GetNick() string { return c.nick }
+
+// GetReceiveChannel retrieves the receive channel.
+func (c Client) GetReceiveChannel() <-chan irc.Message { return c.recvChan }
+
+// GetSendChannel retrieves the send channel.
+func (c Client) GetSendChannel() chan<- irc.Message { return c.sendChan }
+
+// GetErrorChannel retrieves the error channel.
+func (c Client) GetErrorChannel() <-chan error { return c.errChan }
