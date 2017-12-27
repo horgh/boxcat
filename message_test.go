@@ -17,19 +17,19 @@ func TestPRIVMSG(t *testing.T) {
 	}
 	defer catbox.stop()
 
-	client1 := newClient("client1", "127.0.0.1", catbox.Port)
-	recvChan1, sendChan1, _, err := client1.start()
+	client1 := NewClient("client1", "127.0.0.1", catbox.Port)
+	recvChan1, sendChan1, _, err := client1.Start()
 	if err != nil {
 		t.Fatalf("error starting client: %s", err)
 	}
-	defer client1.stop()
+	defer client1.Stop()
 
-	client2 := newClient("client2", "127.0.0.1", catbox.Port)
-	recvChan2, _, _, err := client2.start()
+	client2 := NewClient("client2", "127.0.0.1", catbox.Port)
+	recvChan2, _, _, err := client2.Start()
 	if err != nil {
 		t.Fatalf("error starting client: %s", err)
 	}
-	defer client2.stop()
+	defer client2.Stop()
 
 	if waitForMessage(t, recvChan1, irc.Message{Command: irc.ReplyWelcome},
 		"welcome from %s", client1.GetNick()) == nil {

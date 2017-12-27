@@ -38,12 +38,12 @@ func TestMODETS(t *testing.T) {
 		t.Fatalf("failed to see servers link")
 	}
 
-	client1 := newClient("client1", "127.0.0.1", catbox1.Port)
-	recvChan1, sendChan1, _, err := client1.start()
+	client1 := NewClient("client1", "127.0.0.1", catbox1.Port)
+	recvChan1, sendChan1, _, err := client1.Start()
 	if err != nil {
 		t.Fatalf("error starting client: %s", err)
 	}
-	defer client1.stop()
+	defer client1.Stop()
 
 	if waitForMessage(t, recvChan1, irc.Message{Command: irc.ReplyWelcome},
 		"welcome from %s", client1.GetNick()) == nil {
@@ -109,12 +109,12 @@ func TestMODETS(t *testing.T) {
 
 	// Try a client on the other server and ensure they get the same time.
 
-	client2 := newClient("client2", "127.0.0.1", catbox2.Port)
-	recvChan2, sendChan2, _, err := client2.start()
+	client2 := NewClient("client2", "127.0.0.1", catbox2.Port)
+	recvChan2, sendChan2, _, err := client2.Start()
 	if err != nil {
 		t.Fatalf("error starting client: %s", err)
 	}
-	defer client2.stop()
+	defer client2.Stop()
 
 	if waitForMessage(t, recvChan2, irc.Message{Command: irc.ReplyWelcome},
 		"welcome from %s", client2.GetNick()) == nil {

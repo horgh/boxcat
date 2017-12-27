@@ -31,7 +31,8 @@ type Client struct {
 	wg       *sync.WaitGroup
 }
 
-func newClient(nick, serverHost string, serverPort uint16) *Client {
+// NewClient creates a Client.
+func NewClient(nick, serverHost string, serverPort uint16) *Client {
 	return &Client{
 		nick:       nick,
 		serverHost: serverHost,
@@ -42,7 +43,7 @@ func newClient(nick, serverHost string, serverPort uint16) *Client {
 	}
 }
 
-// start starts a connection and registers.
+// Start starts a client's connection and registers.
 //
 // The client responds to PING commands.
 //
@@ -53,8 +54,8 @@ func newClient(nick, serverHost string, serverPort uint16) *Client {
 // If an error occurs, we send a message on the error channel. If you receive a
 // message on that channel, you must stop the client.
 //
-// The caller must call stop() to clean up the client.
-func (c *Client) start() (
+// The caller must call Stop() to clean up the client.
+func (c *Client) Start() (
 	<-chan irc.Message,
 	chan<- irc.Message,
 	<-chan error,
@@ -230,11 +231,11 @@ func (c Client) readMessage() (irc.Message, error) {
 	return m, nil
 }
 
-// Shut down the client and clean up.
+// Stop shuts down the client and cleans up.
 //
 // You must not send any messages on the send channel after calling this
 // function.
-func (c *Client) stop() {
+func (c *Client) Stop() {
 	// Tell reader and writer to end.
 	close(c.doneChan)
 
