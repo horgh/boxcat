@@ -129,8 +129,8 @@ func (c Client) reader(recvChan chan<- irc.Message) {
 		m, err := c.readMessage()
 		if err != nil {
 			// If we time out waiting for a read to succeed, just ignore it and try
-			// again. We want a short timeout on that so we frequently check
-			// whether we should send.
+			// again. We want a short timeout on that so we frequently check whether
+			// we should end.
 			//
 			// There's no accessible error variable to compare with
 			if strings.Contains(err.Error(), "i/o timeout") {
