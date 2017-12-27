@@ -54,8 +54,12 @@ func newClient(nick, serverHost string, serverPort uint16) *Client {
 // message on that channel, you must stop the client.
 //
 // The caller must call stop() to clean up the client.
-func (c *Client) start() (<-chan irc.Message, chan<- irc.Message,
-	<-chan error, error) {
+func (c *Client) start() (
+	<-chan irc.Message,
+	chan<- irc.Message,
+	<-chan error,
+	error,
+) {
 	if err := c.connect(); err != nil {
 		return nil, nil, nil, fmt.Errorf("error connecting: %s", err)
 	}
