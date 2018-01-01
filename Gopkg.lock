@@ -5,7 +5,7 @@
   branch = "master"
   name = "github.com/horgh/irc"
   packages = ["."]
-  revision = "6b83b645958d6ae7b604e47a1c0593a3d8eba6ff"
+  revision = "f421bdb90dcc93b6e3724a50b1f2b360a6d72a44"
 
 [solve-meta]
   analyzer-name = "dep"
