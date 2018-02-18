@@ -1,2 +1,3 @@
 boxcat
 *.swp
+cmd/connstress/connstress
